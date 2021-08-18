@@ -63,7 +63,8 @@ public class Record : MonoBehaviour
 		// but if for some reason you want to do it manually, just call FlushMemory().
 		//m_Recorder.FlushMemory();
 	}
-
+	private double t1; 
+	private double t2; 
 	void Update()
 	{
 		if (Input.GetKeyDown(KeyCode.Space))
@@ -75,6 +76,15 @@ public class Record : MonoBehaviour
 			m_Recorder.Save();
 			m_Progress = 0f;
 		}
+		else if(Input.GetMouseButtonDown(0)){ 
+			t2 = Time.realtimeSinceStartup; 
+			if(t2 - t1 < 0.2){ 
+				print("double click"); 
+				m_Recorder.Save();
+				m_Progress = 0f;
+			} 
+			t1 = t2; 
+		} 
 	}
 
 	void OnGUI()
