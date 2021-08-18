@@ -25,9 +25,6 @@ using UnityEngine;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
-using JetBrains.Annotations;
 using Moments.Encoder;
 using ThreadPriority = System.Threading.ThreadPriority;
 
@@ -137,11 +134,6 @@ namespace Moments
 		Queue<RenderTexture> m_Frames;
 		RenderTexture m_RecycledRenderTexture;
 		ReflectionUtils<Recorder> m_ReflectionUtils;
-		private struct TextureBuffer {
-			internal Texture2D texture2D;
-			internal bool writeOver;
-		}
-		TextureBuffer[] _buffer;
 
 		#endregion
 
@@ -193,7 +185,6 @@ namespace Moments
 		/// </summary>
 		public void Pause()
 		{
-			Debug.LogError("pause");
 			if (State == RecorderState.PreProcessing)
 			{
 				Debug.LogWarning("Attempting to pause recording during the pre-processing step. The recorder is automatically paused when pre-processing.");
@@ -307,7 +298,7 @@ namespace Moments
 			}
 
 			m_Time += Time.unscaledDeltaTime;
-			Debug.LogError(m_Frames.Count);
+
 			if (m_Time >= m_TimePerFrame)
 			{
 				// Limit the amount of frames stored in memory
@@ -331,105 +322,20 @@ namespace Moments
 				Graphics.Blit(source, rt);
 				m_Frames.Enqueue(rt);
 			}
-			else
-			{
-				Debug.LogError("lost frame");
-			}
 
 			Graphics.Blit(source, destination);
-//			ReadFrame();
-			SavePng();
 		}
 
 		#endregion
 
 		#region Methods
 
-		private int GetBuffer()
-		{
-			var index = -1;
-			for (byte i = 0; i < _buffer.Length; i++)
-			{
-				if (_buffer[i].texture2D == null || _buffer[i].writeOver)
-				{
-					index = i;
-					break;
-				}
-			}
-			if (index < 0) return index;
-			if (_buffer[ index ].texture2D != null) {
-				Destroy( _buffer[ index ].texture2D );
-			}
-			_buffer[ index ].texture2D = new Texture2D(m_Width, m_Height, TextureFormat.RGB24, false);
-			_buffer[ index ].texture2D.hideFlags = HideFlags.HideAndDontSave;
-			_buffer[ index ].texture2D.wrapMode = TextureWrapMode.Clamp;
-			_buffer[ index ].texture2D.filterMode = FilterMode.Bilinear;
-			_buffer[ index ].texture2D.anisoLevel = 0;
-			return index;
-		}
-		private void ReadFrame()
-		{
-			if (m_Frames.Count > 0)
-			{
-				var source = m_Frames.Dequeue();
-				RenderTexture.active = source;
-				var index = GetBuffer( );
-				if (index < 0) {
-					Debug.LogError( "not enough buffer" );
-				} else {
-					_buffer[ index ].texture2D.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0);
-					_buffer[ index ].texture2D.Apply();
-					_buffer[index].writeOver = false;
-					Task.Run( () =>
-					{
-						var bytes = _buffer[index].texture2D.GetRawTextureData();
-//						var bytes = ImageConversion.EncodeArrayToPNG(_buffer[index].texture2D);
-						var path = Application.persistentDataPath + "/" + DateTime.Now.ToString("yyyyMMddHHmmssfff") + ".png";
-						Debug.LogError(path);
-						var file = File.Open(path, FileMode.Create);
-						var writer = new BinaryWriter(file);
-						writer.Write(bytes);
-						file.Close();
-						writer.Close();
-						_buffer[index].writeOver = true;
-					} );
-				}
-				RenderTexture.active = null;
-			}
-		}
-		private void SavePng()
-		{
-			if (m_Frames.Count > 0)
-			{
-				var temp = new Texture2D(m_Width, m_Height, TextureFormat.RGB24, false)
-				{
-					hideFlags = HideFlags.HideAndDontSave,
-					wrapMode = TextureWrapMode.Clamp,
-					filterMode = FilterMode.Bilinear,
-					anisoLevel = 0
-				};
-				var source = m_Frames.Dequeue();
-				RenderTexture.active = source;
-				temp.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0);
-				temp.Apply();
-				RenderTexture.active = null;
-				var bytes = temp.EncodeToPNG();
-				var path = Application.persistentDataPath + "/" + DateTime.Now.ToString("yyyyMMddHHmmss") + ".png";
-				var file = File.Open(path, FileMode.Create);
-				var writer = new BinaryWriter(file);
-				writer.Write(bytes);
-				file.Close();
-				writer.Close();
-				Flush(temp);
-			}
-		}
 		// Used to reset internal values, called on Start(), Setup() and FlushMemory()
 		void Init()
 		{
 			State = RecorderState.Paused;
 			ComputeHeight();
 			m_MaxFrameCount = Mathf.RoundToInt(m_BufferSize * m_FramePerSecond);
-			_buffer = new TextureBuffer[m_MaxFrameCount];
 			m_TimePerFrame = 1f / m_FramePerSecond;
 			m_Time = 0f;
 
